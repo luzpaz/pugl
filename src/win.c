@@ -969,14 +969,13 @@ puglSetWindowTitle(PuglView* view, const char* title)
     }
   }
 
+  view->frame = frame;
   return PUGL_SUCCESS;
 }
 
 PuglStatus
 puglSetFrame(PuglView* view, const PuglRect frame)
 {
-  view->frame = frame;
-
   if (view->impl->hwnd) {
     RECT rect = {(long)frame.x,
                  (long)frame.y,
