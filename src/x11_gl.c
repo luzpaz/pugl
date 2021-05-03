@@ -112,6 +112,9 @@ puglX11GlConfigure(PuglView* view)
 static PuglStatus
 puglX11GlEnter(PuglView* view, const PuglEventExpose* PUGL_UNUSED(expose))
 {
+  if (!view->impl->win) {
+    return PUGL_UNKNOWN_ERROR;
+  }
   PuglX11GlSurface* surface = (PuglX11GlSurface*)view->impl->surface;
   glXMakeCurrent(view->impl->display, view->impl->win, surface->ctx);
   return PUGL_SUCCESS;
