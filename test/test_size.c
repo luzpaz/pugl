@@ -1,5 +1,5 @@
 /*
-  Copyright 2020 David Robillard <d@drobilla.net>
+  Copyright 2021 David Robillard <d@drobilla.net>
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -14,10 +14,7 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-/*
-  Tests the basic sanity of view/window create, configure, map, expose, unmap,
-  and destroy events.
-*/
+// Tests basic view setup
 
 #undef NDEBUG
 
@@ -35,8 +32,6 @@ typedef enum {
   CREATED,
   CONFIGURED,
   MAPPED,
-  EXPOSED,
-  UNMAPPED,
   DESTROYED,
 } State;
 
@@ -45,6 +40,7 @@ typedef struct {
   PuglView*       view;
   PuglTestOptions opts;
   State           state;
+  PuglRect        configuredRect;
 } PuglTest;
 
 static PuglStatus
@@ -65,21 +61,15 @@ onEvent(PuglView* view, const PuglEvent* event)
     if (test->state == CREATED) {
       test->state = CONFIGURED;
     }
+    test->configuredRect.x      = event->configure.x;
+    test->configuredRect.y      = event->configure.y;
+    test->configuredRect.width  = event->configure.width;
+    test->configuredRect.height = event->configure.height;
     break;
   case PUGL_MAP:
-    assert(test->state == CONFIGURED || test->state == UNMAPPED);
     test->state = MAPPED;
     break;
-  case PUGL_EXPOSE:
-    assert(test->state == MAPPED || test->state == EXPOSED);
-    test->state = EXPOSED;
-    break;
-  case PUGL_UNMAP:
-    assert(test->state == MAPPED || test->state == EXPOSED);
-    test->state = UNMAPPED;
-    break;
   case PUGL_DESTROY:
-    assert(test->state == UNMAPPED);
     test->state = DESTROYED;
     break;
   default:
@@ -89,60 +79,59 @@ onEvent(PuglView* view, const PuglEvent* event)
   return PUGL_SUCCESS;
 }
 
-static void
-tick(PuglWorld* world)
-{
-#ifdef __APPLE__
-  // FIXME: Expose events are not events on MacOS, so we can't block
-  // indefinitely here since it will block forever
-  assert(!puglUpdate(world, 1 / 30.0));
-#else
-  assert(!puglUpdate(world, -1));
-#endif
-}
-
 int
 main(int argc, char** argv)
 {
+  static const int minSize     = 256;
+  static const int defaultSize = 512;
+  static const int maxSize     = 1024;
+
   PuglTest test = {puglNewWorld(PUGL_PROGRAM, 0),
                    NULL,
                    puglParseTestOptions(&argc, &argv),
-                   START};
+                   START,
+                   {0.0, 0.0, 0.0, 0.0}};
 
-  // Set up view
+  // Set up view with size bounds and an aspect ratio
   test.view = puglNewView(test.world);
   puglSetClassName(test.world, "Pugl Test");
-  puglSetWindowTitle(test.view, "Pugl Show/Hide Test");
+  puglSetWindowTitle(test.view, "Pugl Size Test");
   puglSetBackend(test.view, puglStubBackend());
   puglSetHandle(test.view, &test);
   puglSetEventFunc(test.view, onEvent);
-  puglSetDefaultSize(test.view, 512, 512);
+  puglSetViewHint(test.view, PUGL_RESIZABLE, PUGL_TRUE);
+  puglSetMinSize(test.view, minSize, minSize);
+  puglSetDefaultSize(test.view, defaultSize, defaultSize);
+  puglSetMaxSize(test.view, maxSize, maxSize);
+  puglSetAspectRatio(test.view, 1, 1, 1, 1);
 
-  // Create initially invisible window
+  // Create and show window
   assert(!puglRealize(test.view));
-  assert(!puglGetVisible(test.view));
-  while (test.state < CREATED) {
-    tick(test.world);
+  assert(!puglShow(test.view));
+  while (test.state < MAPPED) {
+    assert(!puglUpdate(test.world, -1.0));
   }
 
-  // Show and hide window a couple of times
-  for (unsigned i = 0u; i < 2u; ++i) {
-    assert(!puglShow(test.view));
-    while (test.state != EXPOSED) {
-      tick(test.world);
-    }
+  // Check that the frame matches the last configure event
+  const PuglRect frame = puglGetFrame(test.view);
+  assert(frame.x == test.configuredRect.x);
+  assert(frame.y == test.configuredRect.y);
+  assert(frame.width == test.configuredRect.width);
+  assert(frame.height == test.configuredRect.height);
 
-    assert(puglGetVisible(test.view));
-    assert(!puglHide(test.view));
-    while (test.state != UNMAPPED) {
-      tick(test.world);
-    }
-  }
+#if defined(_WIN32) || defined(__APPLE__)
+  /* Some window managers on Linux (particularly tiling ones) just disregard
+     these hints entirely, so we only check that the size is in bounds on MacOS
+     and Windows where this is more or less universally supported. */
+
+  assert(frame.width >= minSize);
+  assert(frame.height >= minSize);
+  assert(frame.width <= maxSize);
+  assert(frame.height <= maxSize);
+#endif
 
   // Tear down
-  assert(!puglGetVisible(test.view));
   puglFreeView(test.view);
-  assert(test.state == DESTROYED);
   puglFreeWorld(test.world);
 
   return 0;

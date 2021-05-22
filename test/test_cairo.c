@@ -1,5 +1,5 @@
 /*
-  Copyright 2020 David Robillard <d@drobilla.net>
+  Copyright 2021 David Robillard <d@drobilla.net>
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -14,53 +14,51 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-/*
-  Tests that realize sends a create event, and can safely be called twice.
-
-  Without handling this case, an application that accidentally calls realize
-  twice could end up in a very confusing situation where multiple windows have
-  been allocated (and ultimately leaked) for a view.
-*/
+// Tests that creating a view with a Cairo backend works
 
 #undef NDEBUG
 
 #include "test_utils.h"
 
+#include "pugl/cairo.h"
 #include "pugl/pugl.h"
-#include "pugl/stub.h"
+
+#include <cairo.h>
 
 #include <assert.h>
 #include <stdbool.h>
-#include <stddef.h>
-
-typedef enum {
-  START,
-  CREATED,
-} State;
 
 typedef struct {
   PuglWorld*      world;
   PuglView*       view;
   PuglTestOptions opts;
-  State           state;
+  bool            exposed;
 } PuglTest;
 
-static PuglStatus
-onEvent(PuglView* view, const PuglEvent* event)
+static void
+onExpose(PuglView* const view, const PuglEventExpose* const event)
 {
-  PuglTest* test = (PuglTest*)puglGetHandle(view);
+  cairo_t* const cr = (cairo_t*)puglGetContext(view);
+
+  assert(cr);
+
+  cairo_rectangle(cr, event->x, event->y, event->width, event->height);
+  cairo_set_source_rgb(cr, 0, 1, 0);
+  cairo_fill(cr);
+}
+
+static PuglStatus
+onEvent(PuglView* const view, const PuglEvent* const event)
+{
+  PuglTest* const test = (PuglTest*)puglGetHandle(view);
 
   if (test->opts.verbose) {
     printEvent(event, "Event: ", true);
   }
 
-  switch (event->type) {
-  case PUGL_CREATE:
-    assert(test->state == START);
-    test->state = CREATED;
-    break;
-  default:
-    break;
+  if (event->type == PUGL_EXPOSE) {
+    onExpose(view, &event->expose);
+    test->exposed = true;
   }
 
   return PUGL_SUCCESS;
@@ -69,29 +67,24 @@ onEvent(PuglView* view, const PuglEvent* event)
 int
 main(int argc, char** argv)
 {
-  PuglTest test = {puglNewWorld(PUGL_PROGRAM, 0),
-                   NULL,
-                   puglParseTestOptions(&argc, &argv),
-                   START};
+  PuglWorld* const      world = puglNewWorld(PUGL_PROGRAM, 0);
+  PuglView* const       view  = puglNewView(world);
+  const PuglTestOptions opts  = puglParseTestOptions(&argc, &argv);
+  PuglTest              test  = {world, view, opts, false};
 
-  // Set up view
-  test.view = puglNewView(test.world);
+  // Set up and show view
   puglSetClassName(test.world, "Pugl Test");
-  puglSetWindowTitle(test.view, "Pugl Realize Test");
-  puglSetBackend(test.view, puglStubBackend());
+  puglSetWindowTitle(test.view, "Pugl Cairo Test");
   puglSetHandle(test.view, &test);
+  puglSetBackend(test.view, puglCairoBackend());
   puglSetEventFunc(test.view, onEvent);
   puglSetDefaultSize(test.view, 512, 512);
+  puglShow(test.view);
 
-  // Create initially invisible window
-  assert(!puglRealize(test.view));
-  assert(!puglGetVisible(test.view));
-  while (test.state < CREATED) {
-    assert(!puglUpdate(test.world, -1.0));
+  // Drive event loop until the view gets exposed
+  while (!test.exposed) {
+    puglUpdate(test.world, -1.0);
   }
-
-  // Check that calling realize() again is okay
-  assert(puglRealize(test.view) == PUGL_FAILURE);
 
   // Tear down
   puglFreeView(test.view);

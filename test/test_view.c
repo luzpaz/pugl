@@ -1,5 +1,5 @@
 /*
-  Copyright 2020 David Robillard <d@drobilla.net>
+  Copyright 2021 David Robillard <d@drobilla.net>
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -14,10 +14,7 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-/*
-  Tests that update events are received and that the redisplays they trigger
-  happen immediately in the same event loop iteration.
-*/
+// Tests basic view setup
 
 #undef NDEBUG
 
@@ -30,17 +27,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#ifdef __APPLE__
-static const double timeout = 1 / 60.0;
-#else
-static const double timeout = -1.0;
-#endif
-
 typedef enum {
   START,
-  EXPOSED1,
-  UPDATED,
-  EXPOSED2,
+  CREATED,
+  MAPPED,
+  DESTROYED,
 } State;
 
 typedef struct {
@@ -60,26 +51,16 @@ onEvent(PuglView* view, const PuglEvent* event)
   }
 
   switch (event->type) {
-  case PUGL_EXPOSE:
-    switch (test->state) {
-    case START:
-      test->state = EXPOSED1;
-      break;
-    case UPDATED:
-      test->state = EXPOSED2;
-      break;
-    default:
-      break;
-    }
+  case PUGL_CREATE:
+    assert(test->state == START);
+    test->state = CREATED;
     break;
-
-  case PUGL_UPDATE:
-    if (test->state == EXPOSED1) {
-      test->state = UPDATED;
-      puglPostRedisplay(view);
-    }
+  case PUGL_MAP:
+    test->state = MAPPED;
     break;
-
+  case PUGL_DESTROY:
+    test->state = DESTROYED;
+    break;
   default:
     break;
   }
@@ -98,7 +79,7 @@ main(int argc, char** argv)
   // Set up view
   test.view = puglNewView(test.world);
   puglSetClassName(test.world, "Pugl Test");
-  puglSetWindowTitle(test.view, "Pugl Update Test");
+  puglSetWindowTitle(test.view, "Pugl View Test");
   puglSetBackend(test.view, puglStubBackend());
   puglSetHandle(test.view, &test);
   puglSetEventFunc(test.view, onEvent);
@@ -107,16 +88,12 @@ main(int argc, char** argv)
   // Create and show window
   assert(!puglRealize(test.view));
   assert(!puglShow(test.view));
-
-  // Tick until an expose happens
-  while (test.state < EXPOSED1) {
-    assert(!puglUpdate(test.world, timeout));
-    assert(test.state != UPDATED);
+  while (test.state < MAPPED) {
+    assert(!puglUpdate(test.world, -1.0));
   }
 
-  // Tick once and ensure the update and the expose it posted both happened
-  assert(!puglUpdate(test.world, 0.0));
-  assert(test.state == EXPOSED2);
+  // Check that puglGetNativeWindow() returns something
+  assert(puglGetNativeWindow(test.view));
 
   // Tear down
   puglFreeView(test.view);

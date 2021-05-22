@@ -39,12 +39,8 @@ static const double timeout = 1 / 60.0;
 static const double timeout = -1.0;
 #endif
 
-#ifdef _WIN32
 // Windows SetTimer has a maximum resolution of 10ms
 static const double tolerance = 0.012;
-#else
-static const double tolerance = 0.002;
-#endif
 
 static const uintptr_t timerId     = 1u;
 static const double    timerPeriod = 1 / 60.0;
@@ -59,11 +55,28 @@ typedef struct {
   PuglView*       view;
   PuglTestOptions opts;
   size_t          numAlarms;
+  double          firstAlarmTime;
+  double          lastAlarmTime;
   State           state;
 } PuglTest;
 
+static void
+onTimer(PuglView* const view, const PuglEventTimer* const event)
+{
+  PuglTest* const test = (PuglTest*)puglGetHandle(view);
+  const double    time = puglGetTime(puglGetWorld(view));
+
+  assert(event->id == timerId);
+
+  if (test->numAlarms++ == 0) {
+    test->firstAlarmTime = time;
+  }
+
+  test->lastAlarmTime = time;
+}
+
 static PuglStatus
-onEvent(PuglView* view, const PuglEvent* event)
+onEvent(PuglView* const view, const PuglEvent* const event)
 {
   PuglTest* test = (PuglTest*)puglGetHandle(view);
 
@@ -77,8 +90,7 @@ onEvent(PuglView* view, const PuglEvent* event)
     break;
 
   case PUGL_TIMER:
-    assert(event->timer.id == timerId);
-    ++test->numAlarms;
+    onTimer(view, &event->timer);
     break;
 
   default:
@@ -97,63 +109,63 @@ roundPeriod(const double period)
 int
 main(int argc, char** argv)
 {
-  PuglTest app = {puglNewWorld(PUGL_PROGRAM, 0),
-                  NULL,
-                  puglParseTestOptions(&argc, &argv),
-                  0,
-                  START};
+  PuglTest test = {puglNewWorld(PUGL_PROGRAM, 0),
+                   NULL,
+                   puglParseTestOptions(&argc, &argv),
+                   0,
+                   0.0,
+                   0.0,
+                   START};
 
   // Set up view
-  app.view = puglNewView(app.world);
-  puglSetClassName(app.world, "Pugl Test");
-  puglSetBackend(app.view, puglStubBackend());
-  puglSetHandle(app.view, &app);
-  puglSetEventFunc(app.view, onEvent);
-  puglSetDefaultSize(app.view, 512, 512);
+  test.view = puglNewView(test.world);
+  puglSetClassName(test.world, "Pugl Test");
+  puglSetWindowTitle(test.view, "Pugl Timer Test");
+  puglSetBackend(test.view, puglStubBackend());
+  puglSetHandle(test.view, &test);
+  puglSetEventFunc(test.view, onEvent);
+  puglSetDefaultSize(test.view, 512, 512);
 
   // Create and show window
-  assert(!puglRealize(app.view));
-  assert(!puglShow(app.view));
-  while (app.state != EXPOSED) {
-    assert(!puglUpdate(app.world, timeout));
+  assert(!puglRealize(test.view));
+  assert(!puglShow(test.view));
+  while (test.state != EXPOSED) {
+    assert(!puglUpdate(test.world, timeout));
   }
 
   // Register a timer with a longer period first
-  assert(!puglStartTimer(app.view, timerId, timerPeriod * 2.0));
+  assert(!puglStartTimer(test.view, timerId, timerPeriod * 2.0));
 
   // Replace it with the one we want (to ensure timers are replaced)
-  assert(!puglStartTimer(app.view, timerId, timerPeriod));
+  assert(!puglStartTimer(test.view, timerId, timerPeriod));
 
-  const double startTime = puglGetTime(app.world);
-
-  puglUpdate(app.world, 1.0);
+  puglUpdate(test.world, timerPeriod * 90.0);
+  assert(test.numAlarms > 0);
 
   // Calculate the actual period of the timer
-  const double endTime        = puglGetTime(app.world);
-  const double duration       = endTime - startTime;
-  const double expectedPeriod = roundPeriod(timerPeriod);
-  const double actualPeriod   = roundPeriod(duration / (double)app.numAlarms);
-  const double difference     = fabs(actualPeriod - expectedPeriod);
+  const double duration = test.lastAlarmTime - test.firstAlarmTime;
+  const double expected = roundPeriod(timerPeriod);
+  const double actual   = roundPeriod(duration / (double)(test.numAlarms - 1));
+  const double difference = fabs(actual - expected);
 
   if (difference > tolerance) {
-    fprintf(
-      stderr, "error: Period not within %f of %f\n", tolerance, expectedPeriod);
-    fprintf(stderr, "note: Actual period %f\n", actualPeriod);
+    fprintf(stderr, "error: Period not within %f of %f\n", tolerance, expected);
+    fprintf(stderr, "note: Actual period %f\n", actual);
   }
 
   assert(difference <= tolerance);
 
   // Deregister timer and tick once to synchronize
-  assert(!puglStopTimer(app.view, timerId));
-  puglUpdate(app.world, 0.0);
+  assert(!puglStopTimer(test.view, timerId));
+  puglUpdate(test.world, 0.0);
 
   // Update for a half second and check that we receive no more alarms
-  app.numAlarms = 0;
-  puglUpdate(app.world, 0.5);
-  assert(app.numAlarms == 0);
+  test.numAlarms = 0;
+  puglUpdate(test.world, 0.5);
+  assert(test.numAlarms == 0);
 
-  puglFreeView(app.view);
-  puglFreeWorld(app.world);
+  puglFreeView(test.view);
+  puglFreeWorld(test.world);
 
   return 0;
 }

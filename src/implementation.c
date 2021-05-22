@@ -16,6 +16,8 @@
 
 #include "implementation.h"
 
+#include "types.h"
+
 #include "pugl/pugl.h"
 
 #include <assert.h>
@@ -163,7 +165,9 @@ puglNewView(PuglWorld* const world)
 void
 puglFreeView(PuglView* view)
 {
-  puglDispatchSimpleEvent(view, PUGL_DESTROY);
+  if (view->eventFunc && view->backend) {
+    puglDispatchSimpleEvent(view, PUGL_DESTROY);
+  }
 
   // Remove from world view list
   PuglWorld* world = view->world;
@@ -220,11 +224,7 @@ puglSetViewHint(PuglView* view, PuglViewHint hint, int value)
 int
 puglGetViewHint(const PuglView* view, PuglViewHint hint)
 {
-  if (hint < PUGL_NUM_VIEW_HINTS) {
-    return view->hints[hint];
-  }
-
-  return PUGL_DONT_CARE;
+  return (hint < PUGL_NUM_VIEW_HINTS) ? view->hints[hint] : PUGL_DONT_CARE;
 }
 
 PuglStatus
@@ -373,23 +373,25 @@ puglDispatchSimpleEvent(PuglView* view, const PuglEventType type)
 }
 
 void
-puglDispatchEventInContext(PuglView* view, const PuglEvent* event)
+puglConfigure(PuglView* view, const PuglEvent* event)
 {
-  if (event->type == PUGL_CONFIGURE) {
-    view->frame.x      = event->configure.x;
-    view->frame.y      = event->configure.y;
-    view->frame.width  = event->configure.width;
-    view->frame.height = event->configure.height;
+  assert(event->type == PUGL_CONFIGURE);
 
-    if (puglMustConfigure(view, &event->configure)) {
-      view->eventFunc(view, event);
-      view->lastConfigure = event->configure;
-    }
-  } else if (event->type == PUGL_EXPOSE) {
-    if (event->expose.width > 0 && event->expose.height > 0) {
-      view->eventFunc(view, event);
-    }
-  } else {
+  view->frame.x      = event->configure.x;
+  view->frame.y      = event->configure.y;
+  view->frame.width  = event->configure.width;
+  view->frame.height = event->configure.height;
+
+  if (puglMustConfigure(view, &event->configure)) {
+    view->eventFunc(view, event);
+    view->lastConfigure = event->configure;
+  }
+}
+
+void
+puglExpose(PuglView* view, const PuglEvent* event)
+{
+  if (event->expose.width > 0.0 && event->expose.height > 0.0) {
     view->eventFunc(view, event);
   }
 }
@@ -409,13 +411,25 @@ puglDispatchEvent(PuglView* view, const PuglEvent* event)
   case PUGL_CONFIGURE:
     if (puglMustConfigure(view, &event->configure)) {
       view->backend->enter(view, NULL);
-      puglDispatchEventInContext(view, event);
+      puglConfigure(view, event);
       view->backend->leave(view, NULL);
+    }
+    break;
+  case PUGL_MAP:
+    if (!view->visible) {
+      view->visible = true;
+      view->eventFunc(view, event);
+    }
+    break;
+  case PUGL_UNMAP:
+    if (view->visible) {
+      view->visible = false;
+      view->eventFunc(view, event);
     }
     break;
   case PUGL_EXPOSE:
     view->backend->enter(view, &event->expose);
-    puglDispatchEventInContext(view, event);
+    puglExpose(view, event);
     view->backend->leave(view, &event->expose);
     break;
   default:
@@ -445,7 +459,7 @@ puglSetInternalClipboard(PuglView* const   view,
                          const void* const data,
                          const size_t      len)
 {
-  if (type && strcmp(type, "text/plain")) {
+  if (type && !!strcmp(type, "text/plain")) {
     return PUGL_UNSUPPORTED_TYPE;
   }
 

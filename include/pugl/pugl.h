@@ -672,7 +672,7 @@ puglGetWorldHandle(PuglWorld* world);
 
    X11: Returns a pointer to the `Display`.
 
-   MacOS: Returns null.
+   MacOS: Returns a pointer to the `NSApplication`.
 
    Windows: Returns the `HMODULE` of the calling process.
 */
