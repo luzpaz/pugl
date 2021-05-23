@@ -1131,6 +1131,10 @@ dispatchX11Events(PuglWorld* const world)
       continue;
     }
 
+    if (world->impl->eventFilter && world->impl->eventFilter(display, &xevent)) {
+      continue;
+    }
+
     PuglView* view = findView(world, xevent.xany.window);
     if (!view) {
       continue;
@@ -1452,4 +1456,11 @@ puglSetCursor(PuglView* const view, const PuglCursor cursor)
   (void)cursor;
   return PUGL_FAILURE;
 #endif
+}
+
+PuglStatus
+puglX11SetEventFilter(PuglWorld* world, PuglX11EventFilter filter)
+{
+  world->impl->eventFilter = filter;
+  return PUGL_SUCCESS;
 }
