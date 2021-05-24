@@ -25,19 +25,23 @@ subdir('xml')
 subdir('api')
 
 docs = custom_target(
-  'C++ API Documentation (singlehtml)',
-  command: [sphinx_build, '-M', 'singlehtml', 'doc/cpp/', 'doc/cpp/', '-E', '-q', '-t', 'singlehtml'],
+  'singlehtml C++ documentation for pugl',
+  command: [sphinx_build, '-M', 'singlehtml',
+            meson.current_build_dir(), meson.current_build_dir(),
+            '-E', '-q', '-t', 'singlehtml'],
   input: [cpp_rst_files, cpp_pugl_rst, cpp_index_xml],
   output: 'singlehtml',
   build_by_default: true,
   install: true,
-  install_dir: docdir / 'puglxx-0')
+  install_dir: docdir / 'puglpp-0')
 
 docs = custom_target(
-  'C++ API Documentation (html)',
-  command: [sphinx_build, '-M', 'html', 'doc/cpp/', 'doc/cpp/', '-E', '-q', '-t', 'html'],
+  'html C++ documentation for pugl',
+  command: [sphinx_build, '-M', 'html',
+            meson.current_build_dir(), meson.current_build_dir(),
+            '-E', '-q', '-t', 'html'],
   input: [cpp_rst_files, cpp_pugl_rst, cpp_index_xml],
   output: 'html',
   build_by_default: true,
   install: true,
-  install_dir: docdir / 'puglxx-0')
+  install_dir: docdir / 'puglpp-0')
