@@ -969,7 +969,6 @@ puglSetWindowTitle(PuglView* view, const char* title)
     }
   }
 
-  view->frame = frame;
   return PUGL_SUCCESS;
 }
 
