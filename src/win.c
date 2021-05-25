@@ -996,6 +996,7 @@ puglSetFrame(PuglView* view, const PuglRect frame)
     }
   }
 
+  view->frame = frame;
   return PUGL_SUCCESS;
 }
 

@@ -83,4 +83,7 @@ puglX11Configure(PuglView* view);
 PuglStatus
 puglX11SetEventFilter(PuglWorld* world, PuglX11EventFilter filter);
 
+PuglStatus
+puglX11SetEventFilter(PuglWorld* world, PuglX11EventFilter filter);
+
 #endif // PUGL_DETAIL_X11_H
