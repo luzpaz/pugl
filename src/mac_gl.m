@@ -73,8 +73,8 @@
     NSOpenGLPFAColorSize,     colorSize,
     NSOpenGLPFADepthSize,     (unsigned)puglview->hints[PUGL_DEPTH_BITS],
     NSOpenGLPFAStencilSize,   (unsigned)puglview->hints[PUGL_STENCIL_BITS],
-    NSOpenGLPFAMultisample,   (NSOpenGLPixelFormatAttribute)(samples ? 1 : 0),
-    NSOpenGLPFASampleBuffers, (NSOpenGLPixelFormatAttribute)(samples ? 1 : 0),
+    NSOpenGLPFAMultisample,   samples ? 1u : 0u,
+    NSOpenGLPFASampleBuffers, samples ? 1u : 0u,
     NSOpenGLPFASamples,       samples,
     0};
   // clang-format on
@@ -146,7 +146,7 @@ puglMacGlDestroy(PuglView* view)
 }
 
 static PuglStatus
-puglMacGlEnter(PuglView* view, const PuglEventExpose* PUGL_UNUSED(expose))
+puglMacGlEnter(PuglView* view, const PuglExposeEvent* PUGL_UNUSED(expose))
 {
   PuglOpenGLView* const drawView = (PuglOpenGLView*)view->impl->drawView;
 
@@ -155,7 +155,7 @@ puglMacGlEnter(PuglView* view, const PuglEventExpose* PUGL_UNUSED(expose))
 }
 
 static PuglStatus
-puglMacGlLeave(PuglView* view, const PuglEventExpose* expose)
+puglMacGlLeave(PuglView* view, const PuglExposeEvent* expose)
 {
   PuglOpenGLView* const drawView = (PuglOpenGLView*)view->impl->drawView;
 

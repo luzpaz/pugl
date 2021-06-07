@@ -385,11 +385,11 @@ puglDecodeUTF16(const wchar_t* buf, const int len)
 {
   const uint32_t c0 = buf[0];
   const uint32_t c1 = buf[0];
-  if (c0 >= 0xD800 && c0 < 0xDC00) {
+  if (c0 >= 0xD800u && c0 < 0xDC00u) {
     if (len < 2) {
       return 0xFFFD; // Surrogate, but length is only 1
-    } else if (c1 >= 0xDC00 && c1 <= 0xDFFF) {
-      return ((c0 & 0x03FF) << 10) + (c1 & 0x03FF) + 0x10000;
+    } else if (c1 >= 0xDC00u && c1 <= 0xDFFFu) {
+      return ((c0 & 0x03FFu) << 10u) + (c1 & 0x03FFu) + 0x10000u;
     }
 
     return 0xFFFD; // Unpaired surrogates
@@ -399,7 +399,7 @@ puglDecodeUTF16(const wchar_t* buf, const int len)
 }
 
 static void
-initKeyEvent(PuglEventKey* event,
+initKeyEvent(PuglKeyEvent* event,
              PuglView*     view,
              bool          press,
              WPARAM        wParam,
@@ -418,7 +418,7 @@ initKeyEvent(PuglEventKey* event,
 
   const unsigned vcode = MapVirtualKey(vkey, MAPVK_VK_TO_VSC);
   const unsigned kchar = MapVirtualKey(vkey, MAPVK_VK_TO_CHAR);
-  const bool     dead  = kchar >> (sizeof(UINT) * 8 - 1) & 1;
+  const bool     dead  = kchar >> (sizeof(UINT) * 8u - 1u) & 1u;
   const bool     ext   = lParam & 0x01000000;
 
   event->type    = press ? PUGL_KEY_PRESS : PUGL_KEY_RELEASE;
@@ -451,8 +451,8 @@ initKeyEvent(PuglEventKey* event,
 static void
 initCharEvent(PuglEvent* event, PuglView* view, WPARAM wParam, LPARAM lParam)
 {
-  const wchar_t utf16[2] = {(wchar_t)(wParam & 0xFFFF),
-                            (wchar_t)((wParam >> 16) & 0xFFFF)};
+  const wchar_t utf16[2] = {(wchar_t)(wParam & 0xFFFFu),
+                            (wchar_t)((wParam >> 16u) & 0xFFFFu)};
 
   initKeyEvent(&event->key, view, true, wParam, lParam);
   event->type           = PUGL_TEXT;
@@ -506,7 +506,7 @@ handleCrossing(PuglView* view, const PuglEventType type, POINT pos)
   POINT root_pos = pos;
   ClientToScreen(view->impl->hwnd, &root_pos);
 
-  const PuglEventCrossing ev = {
+  const PuglCrossingEvent ev = {
     type,
     0,
     GetMessageTime() / 1e3,
@@ -1195,8 +1195,8 @@ puglWinCreateWindow(PuglView* const   view,
   const unsigned winFlags   = puglWinGetWindowFlags(view);
   const unsigned winExFlags = puglWinGetWindowExFlags(view);
 
-  if (view->frame.width == 0.0 && view->frame.height == 0.0) {
-    if (view->defaultWidth == 0.0 && view->defaultHeight == 0.0) {
+  if (view->frame.width <= 0.0 && view->frame.height <= 0.0) {
+    if (view->defaultWidth <= 0.0 && view->defaultHeight <= 0.0) {
       return PUGL_BAD_CONFIGURATION;
     }
 
@@ -1270,7 +1270,7 @@ puglWinConfigure(PuglView* view)
 }
 
 PuglStatus
-puglWinEnter(PuglView* view, const PuglEventExpose* expose)
+puglWinEnter(PuglView* view, const PuglExposeEvent* expose)
 {
   if (expose) {
     PAINTSTRUCT ps;
@@ -1281,7 +1281,7 @@ puglWinEnter(PuglView* view, const PuglEventExpose* expose)
 }
 
 PuglStatus
-puglWinLeave(PuglView* view, const PuglEventExpose* expose)
+puglWinLeave(PuglView* view, const PuglExposeEvent* expose)
 {
   if (expose) {
     PAINTSTRUCT ps;

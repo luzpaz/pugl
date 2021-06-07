@@ -18,7 +18,7 @@ pkg = import('pkgconfig')
 cc = meson.get_compiler('c')
 
 # Enable C++ support if we're building the examples
-if get_option('examples')
+if get_option('examples') or get_option('tests')
   add_languages(['cpp'])
   cpp = meson.get_compiler('cpp')
 endif
@@ -30,31 +30,26 @@ if host_machine.system() == 'darwin'
 endif
 
 # Set ultra strict warnings for developers, if requested
+# These are for the implementation, tests and examples add more suppressions
 if get_option('strict')
   subdir('meson')
 
-  # C warnings
   c_warnings = all_c_warnings
   if cc.get_id() == 'clang'
     c_warnings += [
       '-Wno-bad-function-cast',
       '-Wno-documentation', # Cairo
       '-Wno-documentation-unknown-command', # Cairo
-      '-Wno-float-equal',
-      '-Wno-implicit-fallthrough',
       '-Wno-padded',
       '-Wno-reserved-id-macro',
       '-Wno-switch-default',
       '-Wno-switch-enum',
-      '-Wno-unused-macros', # Mac
     ]
   elif cc.get_id() == 'gcc'
     c_warnings += [
       '-Wno-bad-function-cast',
       '-Wno-float-equal',
-      '-Wno-inline',
       '-Wno-padded',
-      '-Wno-pedantic',
       '-Wno-suggest-attribute=const',
       '-Wno-suggest-attribute=malloc',
       '-Wno-suggest-attribute=pure',
@@ -81,63 +76,17 @@ if get_option('strict')
   add_project_arguments(cc.get_supported_arguments(c_warnings),
                         language: ['c', 'objc'])
 
-  # C++ warnings
-  cpp_warnings = all_cpp_warnings
-  if is_variable('cpp')
-    if cpp.get_id() == 'clang'
-      cpp_warnings += [
-        '-Wno-documentation-unknown-command', # Cairo
-        '-Wno-old-style-cast',
-        '-Wno-padded',
-        '-Wno-reserved-id-macro',
-        '-Wno-switch-enum',
-        '-Wno-unused-macros', # Mac
-      ]
-    elif cpp.get_id() == 'gcc'
-      cpp_warnings += [
-        '-Wno-effc++',
-        '-Wno-inline',
-        '-Wno-old-style-cast',
-        '-Wno-padded',
-        '-Wno-suggest-attribute=const',
-        '-Wno-suggest-attribute=malloc',
-        '-Wno-suggest-attribute=pure',
-        '-Wno-suggest-final-methods',
-        '-Wno-switch-default',
-        '-Wno-switch-enum',
-        '-Wno-unused-const-variable',
-        '-Wno-useless-cast',
-      ]
-    elif cpp.get_id() == 'msvc'
-      cpp_warnings += [
-        '/wd4061',  # enumerator in switch is not explicitly handled
-        '/wd4191',  # unsafe conversion from type to type
-        '/wd4355',  # 'this' used in base member initializer list
-        '/wd4514',  # unreferenced inline function has been removed
-        '/wd4571',  # structured exceptions (SEH) are no longer caught
-        '/wd4625',  # copy constructor implicitly deleted
-        '/wd4626',  # assignment operator implicitly deleted
-        '/wd4706',  # assignment within conditional expression
-        '/wd4710',  # function not inlined
-        '/wd4711',  # function selected for automatic inline expansion
-        '/wd4800',  # implicit conversion from int to bool
-        '/wd4820',  # padding added after construct
-        '/wd4868',  # compiler may not enforce left-to-right evaluation order
-        '/wd4996',  # function or variable may be unsafe
-        '/wd5026',  # move constructor implicitly deleted
-        '/wd5027',  # move assignment operator implicitly deleted
-        '/wd5039',  # potentially throwing function passed to C
-        '/wd5045',  # will insert Spectre mitigation for memory load
-      ]
-    endif
-
-    add_project_arguments(cpp.get_supported_arguments(cpp_warnings),
-                          language: ['cpp'])
-  endif
-
   # Objective C warnings
   if is_variable('objcc')
-    add_project_arguments(objcc.get_supported_arguments(all_objc_warnings),
+    objc_warnings = all_objc_warnings
+
+    objc_warnings += [
+      '-Wno-deprecated-declarations',
+      '-Wno-direct-ivar-access',
+      '-Wno-pedantic',
+    ]
+
+    add_project_arguments(objcc.get_supported_arguments(objc_warnings),
                           language: ['objc'])
   endif
 endif
@@ -145,32 +94,6 @@ endif
 # Disable deprecated API which is not used by tests or examples
 add_project_arguments(['-DPUGL_DISABLE_DEPRECATED'],
                       language: ['c', 'cpp', 'objc'])
-
-c_headers = [
-  'include/pugl/pugl.h',
-
-  'include/pugl/cairo.h',
-  'include/pugl/gl.h',
-  'include/pugl/stub.h',
-  'include/pugl/vulkan.h',
-]
-
-c_header_files = files(c_headers)
-
-cpp_headers = [
-  'bindings/cpp/include/pugl/pugl.hpp',
-
-  'bindings/cpp/include/pugl/cairo.hpp',
-  'bindings/cpp/include/pugl/gl.hpp',
-  'bindings/cpp/include/pugl/stub.hpp',
-  'bindings/cpp/include/pugl/vulkan.hpp',
-]
-
-cpp_header_files = files(cpp_headers)
-
-core_sources = [
-  'src/implementation.c'
-]
 
 # System libraries
 m_dep = cc.find_library('m', required: false)
@@ -197,12 +120,9 @@ if host_machine.system() == 'darwin'
   corevideo_dep = dependency('CoreVideo', required: false)
 
   platform = 'mac'
-  platform_sources = ['src/mac.m']
+  platform_sources = files('src/mac.m')
   core_deps = [cocoa_dep, corevideo_dep]
   extension = '.m'
-
-  add_project_arguments(['-Wno-deprecated-declarations'], language: ['objc'])
-  add_project_arguments(['-Wno-direct-ivar-access'], language: ['objc'])
 
   add_project_arguments(['-DGL_SILENCE_DEPRECATION'],
                         language: ['c', 'objc'])
@@ -212,7 +132,7 @@ if host_machine.system() == 'darwin'
 
 # Windows
 elif host_machine.system() == 'windows'
-  if cpp.get_id() == 'msvc'
+  if cc.get_id() == 'msvc'
     msvc_args = [
       '/TP',
       '/experimental:external',
@@ -231,7 +151,7 @@ elif host_machine.system() == 'windows'
   add_project_arguments(win_args, language: ['c', 'cpp'])
 
   platform = 'win'
-  platform_sources = ['src/win.c']
+  platform_sources = files('src/win.c')
   core_deps = []
   extension = '.c'
 
@@ -259,7 +179,7 @@ else # X11
   endif
 
   platform = 'x11'
-  platform_sources = ['src/x11.c']
+  platform_sources = files('src/x11.c')
   core_deps = [x11_dep, xcursor_dep, xrandr_dep, xext_dep]
   extension = '.c'
 endif
@@ -267,9 +187,9 @@ endif
 # Build core library
 
 core_deps += [m_dep]
-core_sources += platform_sources
 core_name = 'pugl_@0@@1@'.format(platform, version_suffix)
 
+# Determine library type and set up defines for building them
 library_args = ['-DPUGL_INTERNAL']
 if get_option('default_library') == 'both'
   if host_machine.system() == 'windows'
@@ -284,8 +204,10 @@ else
   add_project_arguments(['-DPUGL_STATIC'], language: ['c', 'cpp', 'objc'])
 endif
 
+# Build core library
 libpugl = build_target(
-  core_name, core_sources,
+  core_name,
+  files('src/implementation.c') + platform_sources,
   version: meson.project_version(),
   include_directories: include_directories(['include']),
   c_args: library_args + core_args,
@@ -296,6 +218,7 @@ libpugl = build_target(
 
 pugl_dep = declare_dependency(link_with: libpugl, dependencies: core_deps)
 
+# Build pkg-config file
 pkg.generate(libpugl,
              name: 'Pugl',
              filebase: versioned_name,
@@ -306,7 +229,7 @@ pkg.generate(libpugl,
 # Build stub backend
 
 name = 'pugl_' + platform + '_stub' + version_suffix
-sources = 'src/' + platform + '_stub' + extension
+sources = files('src/' + platform + '_stub' + extension)
 
 stub_backend = build_target(
   name, sources,
@@ -330,7 +253,7 @@ pkg.generate(stub_backend,
 # Build GL backend
 if opengl_dep.found()
   name = 'pugl_' + platform + '_gl' + version_suffix
-  sources = 'src/' + platform + '_gl' + extension
+  sources = files('src/' + platform + '_gl' + extension)
 
   gl_backend = build_target(
     name, sources,
@@ -356,7 +279,7 @@ endif
 # Build Cairo backend
 if cairo_dep.found()
   name = 'pugl_' + platform + '_cairo' + version_suffix
-  sources = ['src/' + platform + '_cairo' + extension]
+  sources = files('src/' + platform + '_cairo' + extension)
 
   cairo_backend = build_target(
     name, sources,
@@ -383,7 +306,7 @@ endif
 # Build Vulkan backend
 if vulkan_dep.found()
   name = 'pugl_' + platform + '_vulkan' + version_suffix
-  sources = ['src/' + platform + '_vulkan' + extension]
+  sources = files('src/' + platform + '_vulkan' + extension)
 
   vulkan_deps = [pugl_dep, vulkan_dep, dl_dep]
   vulkan_c_args = library_args
@@ -417,14 +340,9 @@ if vulkan_dep.found()
                description: 'Pugl GUI library with Vulkan backend')
 endif
 
-install_headers(c_headers, subdir: versioned_name / 'pugl')
-install_headers(cpp_headers, subdir: 'puglpp' + version_suffix / 'pugl')
-
-pkg.generate(name: 'Pugl++',
-             filebase: 'puglpp-@0@'.format(major_version),
-             subdirs: ['puglpp-@0@'.format(major_version)],
-             version: meson.project_version(),
-             description: 'Pugl GUI library C++ bindings')
+# Process all headers first so they are available for building documentation
+subdir('include')
+subdir('bindings/cpp')
 
 if not get_option('docs').disabled()
   subdir('doc')

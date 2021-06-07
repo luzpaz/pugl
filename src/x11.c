@@ -17,7 +17,7 @@
 */
 
 #ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199309L
+#  define _POSIX_C_SOURCE 199309L
 #endif
 
 #include "x11.h"
@@ -64,6 +64,16 @@
 
 #ifndef MAX
 #  define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifdef __cplusplus
+#  define PUGL_INIT_STRUCT \
+    {}
+#else
+#  define PUGL_INIT_STRUCT \
+    {                      \
+      0                    \
+    }
 #endif
 
 enum WmClientStateMessageAction {
@@ -209,7 +219,7 @@ updateSizeHints(const PuglView* const view)
   }
 
   Display*   display   = view->world->impl->display;
-  XSizeHints sizeHints = {0};
+  XSizeHints sizeHints = PUGL_INIT_STRUCT;
 
   if (!view->hints[PUGL_RESIZABLE]) {
     sizeHints.flags       = PBaseSize | PMinSize | PMaxSize;
@@ -280,7 +290,7 @@ puglRealize(PuglView* const view)
   const int            screen  = DefaultScreen(display);
   const Window         root    = RootWindow(display, screen);
   const Window         parent  = view->parent ? (Window)view->parent : root;
-  XSetWindowAttributes attr    = {0};
+  XSetWindowAttributes attr    = PUGL_INIT_STRUCT;
   PuglStatus           st      = PUGL_SUCCESS;
 
   // Ensure that we're unrealized and that a reasonable backend has been set
@@ -293,8 +303,8 @@ puglRealize(PuglView* const view)
   }
 
   // Set the size to the default if it has not already been set
-  if (view->frame.width == 0.0 && view->frame.height == 0.0) {
-    if (view->defaultWidth == 0.0 || view->defaultHeight == 0.0) {
+  if (view->frame.width <= 0.0 && view->frame.height <= 0.0) {
+    if (view->defaultWidth <= 0.0 || view->defaultHeight <= 0.0) {
       return PUGL_BAD_CONFIGURATION;
     }
 
@@ -303,7 +313,7 @@ puglRealize(PuglView* const view)
   }
 
   // Center top-level windows if a position has not been set
-  if (!view->parent && view->frame.x == 0.0 && view->frame.y == 0.0) {
+  if (!view->parent && view->frame.x <= 0.0 && view->frame.y <= 0.0) {
     const int screenWidth  = DisplayWidth(display, screen);
     const int screenHeight = DisplayHeight(display, screen);
 
@@ -389,7 +399,7 @@ puglRealize(PuglView* const view)
                         impl->win,
                         XNFocusWindow,
                         impl->win,
-                        NULL);
+                        (XIM)0);
 
 #ifdef HAVE_XCURSOR
   defineCursorShape(view, impl->cursorShape);
@@ -689,7 +699,9 @@ translateEvent(PuglView* const view, XEvent xevent)
     }
     break;
   case ButtonPress:
-    if (xevent.xbutton.button >= 4 && xevent.xbutton.button <= 7) {
+  case ButtonRelease:
+    if (xevent.type == ButtonPress && xevent.xbutton.button >= 4 &&
+        xevent.xbutton.button <= 7) {
       event.type         = PUGL_SCROLL;
       event.scroll.time  = (double)xevent.xbutton.time / 1e3;
       event.scroll.x     = xevent.xbutton.x;
@@ -717,11 +729,7 @@ translateEvent(PuglView* const view, XEvent xevent)
         event.scroll.direction = PUGL_SCROLL_RIGHT;
         break;
       }
-      // fallthru
-    }
-    // fallthru
-  case ButtonRelease:
-    if (xevent.xbutton.button < 4 || xevent.xbutton.button > 7) {
+    } else if (xevent.xbutton.button < 4 || xevent.xbutton.button > 7) {
       event.button.type   = ((xevent.type == ButtonPress) ? PUGL_BUTTON_PRESS
                                                           : PUGL_BUTTON_RELEASE);
       event.button.time   = (double)xevent.xbutton.time / 1e3;
@@ -971,7 +979,7 @@ puglWaitForEvent(PuglView* const view)
 #endif
 
 static void
-mergeExposeEvents(PuglEventExpose* const dst, const PuglEventExpose* const src)
+mergeExposeEvents(PuglExposeEvent* const dst, const PuglExposeEvent* const src)
 {
   if (!dst->type) {
     *dst = *src;
@@ -1257,7 +1265,7 @@ puglPostRedisplay(PuglView* const view)
 PuglStatus
 puglPostRedisplayRect(PuglView* const view, const PuglRect rect)
 {
-  const PuglEventExpose event = {
+  const PuglExposeEvent event = {
     PUGL_EXPOSE, 0, rect.x, rect.y, rect.width, rect.height};
 
   if (view->world->impl->dispatchingEvents) {
@@ -1464,7 +1472,7 @@ PuglStatus
 puglX11Configure(PuglView* view)
 {
   PuglInternals* const impl = view->impl;
-  XVisualInfo          pat  = {0};
+  XVisualInfo          pat  = PUGL_INIT_STRUCT;
   int                  n    = 0;
 
   pat.screen = impl->screen;
